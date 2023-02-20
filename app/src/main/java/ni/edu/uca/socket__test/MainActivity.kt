@@ -1,6 +1,7 @@
 package ni.edu.uca.socket__test
 
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.*
 import ni.edu.uca.socket__test.databinding.ActivityMainBinding
@@ -21,9 +22,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         listen()
-        runBlocking {
-            ss = ServerSocket()
-        }
         binding.btnSend.setOnClickListener {
             send(binding.etMessage.text.toString())
         }
@@ -35,22 +33,27 @@ class MainActivity : AppCompatActivity() {
             var br: BufferedReader
             var message: String
             ss = ServerSocket(7800)
-            if(ss.isClosed) println("NOOOOOOOOOOOOOOOOOO")
             while (true) {
-                if (isActive) {
-                    delay(50)
-                    var s = ss.accept()
-                    isr = InputStreamReader(s.getInputStream())
-                    br = BufferedReader(isr)
-                    message = br.readLine()
-                    launch(Dispatchers.Main) {
-                        if (binding.tvReceived.text.toString().equals("")) {
-                            binding.tvReceived.text = "Android: $message"
-                        } else {
-                            binding.tvReceived.text =
-                                "${binding.tvReceived.text.toString()} \n $message"
+                try {
+                    if (isActive && !ss.isClosed) {
+                        delay(50)
+                        Log.wtf("DISCOVER THE SOCKET STATE: ", "" + ss.isClosed)
+                        var s = ss.accept() // esta funcion bloquea el codigo que le sigue hasta que reciba respuesta
+                        Log.wtf("DISCOVER THE SOCKET STATE: ", "" + ss.isClosed)
+                        isr = InputStreamReader(s.getInputStream())
+                        br = BufferedReader(isr)
+                        message = br.readLine()
+                        launch(Dispatchers.Main) {
+                            if (binding.tvReceived.text.toString().equals("")) {
+                                binding.tvReceived.text = "Android: $message"
+                            } else {
+                                binding.tvReceived.text =
+                                    "${binding.tvReceived.text.toString()} \n $message"
+                            }
                         }
                     }
+                }catch (ex: Exception){
+                    ex.printStackTrace()
                 }
             }
         }
@@ -58,22 +61,31 @@ class MainActivity : AppCompatActivity() {
 
     fun send(message: String) {
         GlobalScope.launch(Dispatchers.IO) {
-            var s = Socket("192.168.1.5", 7800)// open connection
-            var pw = PrintWriter(s.getOutputStream()) // sync datasender to connection target
-            pw.write(message) // send message
-            pw.flush() // clear buffer
-            pw.close() // close sender
-            s.close()
+            try {
+                var s = Socket("192.168.1.5", 7800)// open connection
+                var pw = PrintWriter(s.getOutputStream()) // sync datasender to connection target
+                pw.write(message) // send message
+                pw.flush() // clear buffer
+                pw.close() // close sender
+                s.close()
+            }catch (ex: Exception){
+                ex.printStackTrace()
+            }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         runBlocking {
-            jobListen.cancel()
+            jobListen.cancel() // detener el loop de la coroutine
             delay(2000)
             withContext(Dispatchers.IO) {
-                ss.close()
+                try {
+                    ss.close() // cerrar el puerto para poder reisntanciar en 7800 (linea 35)
+                    ss = ServerSocket() //
+                }catch (ex: Exception){
+                    ex.printStackTrace()
+                }
             }
         }
     }
